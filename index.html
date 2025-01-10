@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Retro MD Index</title>
+  <style>
+    /* Overall Retro Theme */
+    body {
+      background-color: black;
+      color: limegreen;
+      font-family: monospace;
+      margin: 2rem;
+    }
+    
+    /* Header box with ASCII-style border */
+    .header-box {
+      padding: 1rem;
+      border: 2px solid limegreen;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    .header-top,
+    .header-bottom {
+      font-weight: bold;
+      color: limegreen;
+    }
+    .header-content {
+      margin: 0.5rem 0;
+    }
+
+    /* Search UI */
+    .search-area {
+      border: 1px solid limegreen;
+      padding: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .search-area label {
+      margin-right: 0.3rem;
+    }
+    .search-area input[type="text"] {
+      flex: 1;
+      background-color: black;
+      color: limegreen;
+      font-family: monospace;
+      border: 1px solid limegreen;
+      padding: 0.3rem;
+    }
+    .search-area button {
+      background-color: black;
+      color: limegreen;
+      font-family: monospace;
+      border: 1px solid limegreen;
+      padding: 0.3rem 1rem;
+      cursor: pointer;
+    }
+    .search-area button:hover {
+      background-color: limegreen;
+      color: black;
+    }
+
+    /* Results & Pagination */
+    .results-info {
+      margin-bottom: 0.5rem;
+    }
+    .results {
+      border: 1px solid limegreen;
+      padding: 1rem;
+    }
+    .result-item {
+      margin-bottom: 1rem;
+      padding: 0.5rem;
+      transition: background-color 0.2s;
+    }
+    /* Subtle highlight on hover */
+    .result-item:hover {
+      background-color: #003000; /* dark greenish for highlight */
+    }
+
+    /* Links */
+    a {
+      color: limegreen;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    /* Pagination */
+    .pagination {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .pagination button {
+      background-color: black;
+      color: limegreen;
+      font-family: monospace;
+      border: 1px solid limegreen;
+      padding: 0.3rem 0.6rem;
+      cursor: pointer;
+    }
+    .pagination button:hover:not(:disabled) {
+      background-color: limegreen;
+      color: black;
+    }
+    .pagination button:disabled {
+      color: black;
+      background-color: limegreen;
+      cursor: default;
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- ASCII Header -->
+<div class="header-box">
+  <div class="header-top">/--------------------------------------\</div>
+  <div class="header-content"> My Retro MD Notes </div>
+  <div class="header-bottom">\--------------------------------------/</div>
+</div>
+
+<!-- Search Area -->
+<div class="search-area">
+  <label for="searchInput">Search (filename & content): </label>
+  <input type="text" id="searchInput" placeholder="Type here...">
+  <button id="searchBtn">Search</button>
+</div>
+
+<!-- Results Info (e.g. "Showing 1-5 of 12 results (Page 1 of 3)") -->
+<div class="results-info" id="resultsInfo"></div>
+
+<!-- Results Container -->
+<div class="results" id="resultsContainer"></div>
+
+<!-- Pagination Controls -->
+<div class="pagination" id="paginationContainer"></div>
+
+<script>
+/******************************************************************************
+ * 1) GLOBAL STATE
+ *****************************************************************************/
+let allNotes = [];      // Will store JSON data from db.json
+let filteredNotes = []; // After a search, this is the subset
+let currentPage = 1;
+const pageSize = 5;     // Items per page
+
+/******************************************************************************
+ * 2) FETCH db.json
+ *****************************************************************************/
+function loadNotesFromDB() {
+  return fetch('db.json')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error("Could not fetch db.json");
+      }
+      return response.json();
+    })
+    .then(data => {
+      allNotes = data;
+      filteredNotes = data.slice();
+      renderResults();
+    })
+    .catch(err => {
+      console.error(err);
+      const resultsContainer = document.getElementById('resultsContainer');
+      resultsContainer.innerHTML = `<p style="color: red;">Error loading notes. Check console.</p>`;
+    });
+}
+
+/******************************************************************************
+ * 3) SEARCH FUNCTION
+ *****************************************************************************/
+function searchNotes(query) {
+  query = query.trim().toLowerCase();
+  if (query === '') {
+    // If empty query, show all
+    filteredNotes = allNotes.slice();
+  } else {
+    filteredNotes = allNotes.filter(note => {
+      const haystack = (note.filename + ' ' + note.content).toLowerCase();
+      return haystack.includes(query);
+    });
+  }
+  currentPage = 1; // reset pagination
+  renderResults();
+}
+
+/******************************************************************************
+ * 4) RENDER RESULTS WITH PAGINATION
+ *****************************************************************************/
+function renderResults() {
+  const resultsContainer = document.getElementById('resultsContainer');
+  const paginationContainer = document.getElementById('paginationContainer');
+  const resultsInfo = document.getElementById('resultsInfo');
+  
+  resultsContainer.innerHTML = '';
+  paginationContainer.innerHTML = '';
+  resultsInfo.innerHTML = '';
+
+  // If no notes
+  if (filteredNotes.length === 0) {
+    resultsContainer.innerHTML = '<p>No matching notes found.</p>';
+    return;
+  }
+
+  // Pagination calc
+  const totalItems = filteredNotes.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const pageNotes = filteredNotes.slice(startIndex, endIndex);
+
+  // Results info line
+  resultsInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalItems} results (Page ${currentPage} of ${totalPages})`;
+
+  // Render notes
+  pageNotes.forEach(note => {
+    // Truncate preview
+    const truncatedContent = note.content.substring(0, 200).replace(/\n/g, ' ');
+    
+    const noteDiv = document.createElement('div');
+    noteDiv.classList.add('result-item');
+    noteDiv.innerHTML = `
+      <div><strong>Filename:</strong> ${note.filename}</div>
+      <div>
+        <strong>Preview:</strong> ${truncatedContent}${note.content.length > 200 ? '...' : ''}
+      </div>
+      <div>
+        <a href="notes/${note.filename}" target="_blank">Open Raw .MD</a>
+      </div>
+    `;
+    resultsContainer.appendChild(noteDiv);
+  });
+
+  // Render pagination buttons if more than 1 page
+  if (totalPages > 1) {
+    // Page buttons
+    for (let page = 1; page <= totalPages; page++) {
+      const btn = document.createElement('button');
+      btn.textContent = page;
+      if (page === currentPage) {
+        btn.disabled = true;
+      }
+      btn.addEventListener('click', () => {
+        currentPage = page;
+        renderResults();
+      });
+      paginationContainer.appendChild(btn);
+    }
+  }
+}
+
+/******************************************************************************
+ * 5) EVENT LISTENERS
+ *****************************************************************************/
+window.addEventListener('DOMContentLoaded', () => {
+  loadNotesFromDB();
+
+  document.getElementById('searchBtn').addEventListener('click', () => {
+    const query = document.getElementById('searchInput').value;
+    searchNotes(query);
+  });
+
+  // Press Enter to search
+  document.getElementById('searchInput').addEventListener('keyup', e => {
+    if (e.key === 'Enter') {
+      const query = e.target.value;
+      searchNotes(query);
+    }
+  });
+});
+</script>
+
+</body>
+</html>
